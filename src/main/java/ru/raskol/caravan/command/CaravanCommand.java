@@ -45,16 +45,18 @@ public final class CaravanCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage("§6=== RaskolCaravan ===");
-        sender.sendMessage("§e/caravan offer <нация2> <сумма1> <сумма2> <процент1> <процент2> [стража]");
-        sender.sendMessage("§e/caravan accept <id> §7— принять оффер");
-        sender.sendMessage("§e/caravan reject <id> §7— отклонить оффер");
-        sender.sendMessage("§e/caravan offers §7— список входящих офферов");
-        sender.sendMessage("§e/caravan list §7— список активных караванов");
-        sender.sendMessage("§e/caravan cancel <id> §7— (админ) отменить караван");
-        sender.sendMessage("§e/caravan reload");
+        sender.sendMessage("§6=== RaskolTradeCaravan ===");
+        sender.sendMessage("§e/tradecaravan offer <нация2> <сумма1> <сумма2> <процент1> <процент2> [стража]");
+        sender.sendMessage("§e/tradecaravan accept <id> §7— принять оффер");
+        sender.sendMessage("§e/tradecaravan reject <id> §7— отклонить оффер");
+        sender.sendMessage("§e/tradecaravan offers §7— список входящих офферов");
+        sender.sendMessage("§e/tradecaravan list §7— список активных караванов");
+        sender.sendMessage("§e/tradecaravan cancel <id> §7— (админ) отменить караван");
+        sender.sendMessage("§e/tradecaravan reload");
         sender.sendMessage("§7Сумма процентов должна быть = "
                 + plugin.getConfig().getDouble("caravan.profit-percent", 10.0) + "%");
+        sender.sendMessage("§7Базовое HP каравана: §e" + (int) plugin.getConfig().getDouble("caravan.base-hp", 500.0)
+                + "§7, +§e" + (int) plugin.getConfig().getDouble("caravan.hp-per-guard", 200.0) + "§7 за стражника");
     }
 
     private boolean admin(CommandSender sender) {
@@ -66,7 +68,7 @@ public final class CaravanCommand implements CommandExecutor, TabCompleter {
     private void handleOffer(CommandSender sender, String[] args) {
         if (!(sender instanceof Player p)) { sender.sendMessage("§cТолько игроки."); return; }
         if (args.length < 6) {
-            p.sendMessage("§c/caravan offer <нация2> <сумма1> <сумма2> <процент1> <процент2> [стража]");
+            p.sendMessage("§c/tradecaravan offer <нация2> <сумма1> <сумма2> <процент1> <процент2> [стража]");
             return;
         }
         String target = args[1];
@@ -88,14 +90,14 @@ public final class CaravanCommand implements CommandExecutor, TabCompleter {
 
     private void handleAccept(CommandSender sender, String[] args) {
         if (!(sender instanceof Player p)) { sender.sendMessage("§cТолько игроки."); return; }
-        if (args.length < 2) { p.sendMessage("§c/caravan accept <id>"); return; }
+        if (args.length < 2) { p.sendMessage("§c/tradecaravan accept <id>"); return; }
         CaravanService.AcceptResult r = service.acceptOffer(p, args[1]);
         p.sendMessage(r.message);
     }
 
     private void handleReject(CommandSender sender, String[] args) {
         if (!(sender instanceof Player p)) { sender.sendMessage("§cТолько игроки."); return; }
-        if (args.length < 2) { p.sendMessage("§c/caravan reject <id>"); return; }
+        if (args.length < 2) { p.sendMessage("§c/tradecaravan reject <id>"); return; }
         service.rejectOffer(p, args[1]);
     }
 
@@ -132,14 +134,14 @@ public final class CaravanCommand implements CommandExecutor, TabCompleter {
                     + "вложение §b" + plugin.getVaultHook().format(o.deposit1 + o.deposit2)
                     + "§7, проценты §e" + o.percent1 + "/" + o.percent2
                     + "§7, стража §e" + o.guards + "§7, истекает через §e" + (remain / 60) + " мин");
-            p.sendMessage("§aПринять: §e/caravan accept " + o.id
-                    + "  §cОтклонить: §e/caravan reject " + o.id);
+            p.sendMessage("§aПринять: §e/tradecaravan accept " + o.id
+                    + "  §cОтклонить: §e/tradecaravan reject " + o.id);
         }
     }
 
     private void handleCancel(CommandSender sender, String[] args) {
         if (!admin(sender)) return;
-        if (args.length < 2) { sender.sendMessage("§c/caravan cancel <id>"); return; }
+        if (args.length < 2) { sender.sendMessage("§c/tradecaravan cancel <id>"); return; }
         for (Caravan c : new ArrayList<>(store.caravans())) {
             if (c.id.equals(args[1])) {
                 store.removeCaravan(c);
@@ -153,7 +155,7 @@ public final class CaravanCommand implements CommandExecutor, TabCompleter {
     private void handleReload(CommandSender sender) {
         if (!admin(sender)) return;
         plugin.reloadConfig();
-        sender.sendMessage("§aКонфиг RaskolCaravan перезагружен.");
+        sender.sendMessage("§aКонфиг RaskolTradeCaravan перезагружен.");
     }
 
     @Override
