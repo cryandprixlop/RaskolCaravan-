@@ -1,0 +1,15 @@
+name: RaskolCaravan
+version: ${project.version}
+main: ru.raskol.caravan.RaskolCaravan
+api-version: '1.21'
+author: Baltimor
+description: Trade caravans between kingdoms via Towny.
+softdepend: [Towny, Vault]
+commands:
+  caravan:
+    description: Caravan commands
+    usage: /caravan help
+permissions:
+  caravan.rob:
+    description: Ability to rob caravans
+    default: true
