@@ -1,11 +1,11 @@
-# ===== RaskolCaravan =====
+# ===== RaskolTradeCaravan =====
 caravan:
   travel-seconds: 7200      # 2 часа реального времени
   cooldown-hours: 24        # КД между парой королевств
   profit-percent: 10.0      # 10% от общей суммы — прибыль на двоих
   guard-price: 10000.0      # цена одного стражника 50 ур.
-  base-hp: 20.0             # базовое HP каравана
-  hp-per-guard: 20.0        # +HP за каждого стражника
+  base-hp: 500.0            # базовое HP каравана
+  hp-per-guard: 200.0       # +HP за каждого стражника
   offer-timeout-seconds: 600 # 10 минут на ответ по офферу
 
 robbery:
