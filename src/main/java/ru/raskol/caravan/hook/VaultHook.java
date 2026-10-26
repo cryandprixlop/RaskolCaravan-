@@ -19,4 +19,15 @@ public final class VaultHook {
     public boolean isAvailable() { return economy != null; }
     public double balance(Player p) { return isAvailable() ? economy.getBalance(p) : 0.0; }
     public String format(double a) { return isAvailable() ? economy.format(a) : String.valueOf(a); }
+    public boolean has(Player p, double a) { return isAvailable() && economy.has(p, a); }
+
+    public boolean depositPlayer(Player player, double amount) {
+        if (!isAvailable()) return false;
+        return economy.depositPlayer(player, amount).transactionSuccess();
+    }
+
+    public boolean withdraw(Player player, double amount) {
+        if (!isAvailable()) return false;
+        return economy.withdrawPlayer(player, amount).transactionSuccess();
+    }
 }
