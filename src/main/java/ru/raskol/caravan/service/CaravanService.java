@@ -3,8 +3,9 @@ package ru.raskol.caravan.service;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import ru.raskol.caravan.RaskolCaravan;
@@ -15,7 +16,7 @@ import ru.raskol.caravan.store.CaravanStore;
 
 import java.util.UUID;
 
-/** Логика офферов, старта караванов, прибытия. */
+/** Логика офферов, старта караванов, прибытия и ограблений. */
 public final class CaravanService {
 
     private final RaskolCaravan plugin;
@@ -39,7 +40,6 @@ public final class CaravanService {
         if (myNation.equalsIgnoreCase(targetNation))
             return new OfferResult(false, "§cНельзя отправить караван в своё королевство.");
 
-        // КД
         long cdHours = plugin.getConfig().getLong("caravan.cooldown-hours", 24);
         long last = store.lastCaravan(myNation, targetNation);
         long remainSec = last + cdHours * 3600L - System.currentTimeMillis() / 1000L;
@@ -47,10 +47,9 @@ public final class CaravanService {
             long h = remainSec / 3600;
             long m = (remainSec % 3600) / 60;
             return new OfferResult(false, "§cКД между королевствами " + myNation + " и "
-                    + targetNation + ": " + h + " ч " + m + " мин.");
+                    + targetNation + ": ещё " + h + " ч " + m + " мин.");
         }
 
-        // Процент прибыли
         double profit = plugin.getConfig().getDouble("caravan.profit-percent", 10.0);
         if (Math.abs((percent1 + percent2) - profit) > 0.001) {
             return new OfferResult(false, "§cСумма процентов должна быть равна "
@@ -58,22 +57,19 @@ public final class CaravanService {
         }
         if (percent1 < 0 || percent2 < 0)
             return new OfferResult(false, "§cПроценты не могут быть отрицательными.");
-
         if (deposit1 <= 0 || deposit2 <= 0)
             return new OfferResult(false, "§cВложения должны быть > 0.");
         if (guards < 0) return new OfferResult(false, "§cСтража не может быть отрицательной.");
 
-        // Баланс своей казны
         double guardCost = guards * plugin.getConfig().getDouble("caravan.guard-price", 10000.0);
         double need = deposit1 + guardCost;
         double have = towny.nationBalance(myNation);
         if (have < need) {
-            return new OfferResult(false, "§cВ казне королевства §e" + myNation + " §cнедостаточно: "
-                    + "нужно §b" + plugin.getVaultHook().format(need)
-                    + " §c(вложение + стража), есть §b" + plugin.getVaultHook().format(have) + "§c.");
+            return new OfferResult(false, "§cВ казне §e" + myNation + " §cнедостаточно: нужно §b"
+                    + plugin.getVaultHook().format(need) + " §c(вложение + стража), есть §b"
+                    + plugin.getVaultHook().format(have) + "§c.");
         }
 
-        // Существует ли партнёр и его столица в том же мире
         String king2Name = towny.kingName(targetNation);
         if (king2Name == null)
             return new OfferResult(false, "§cКоролевство §e" + targetNation + " §cне найдено.");
@@ -102,20 +98,19 @@ public final class CaravanService {
 
         Player king2 = Bukkit.getPlayerExact(king2Name);
         if (king2 != null) {
-            king2.sendMessage("§6✦ §e" + king.getName() + " §6(король §e" + myNation + "§6) "
-                    + "предлагает торговый караван!");
+            king2.sendMessage("§6✦ §e" + king.getName() + " §6(король §e" + myNation + "§6) предлагает караван!");
             king2.sendMessage("§7Вложения: §b" + plugin.getVaultHook().format(deposit1)
                     + " §7+ §b" + plugin.getVaultHook().format(deposit2)
-                    + " §7(ожидаемая прибыль: " + (percent1 + percent2) + "%)");
-            king2.sendMessage("§7Стражников нанято: §e" + guards);
-            king2.sendMessage("§aПринять: §e/caravan accept " + o.id
-                    + "  §cОтклонить: §e/caravan reject " + o.id);
+                    + " §7· прибыль: " + (percent1 + percent2) + "% · стража: " + guards);
+            king2.sendMessage("§aПринять: §e/tradecaravan accept " + o.id
+                    + "  §cОтклонить: §e/tradecaravan reject " + o.id);
         }
 
-        return new OfferResult(true,
-                "§a✦ Оффер §e" + o.id + " §aотправлен королю §e" + king2Name
-                        + " §a(§e" + targetNation + "§a).");
+        return new OfferResult(true, "§a✦ Оффер §e" + o.id + " §aотправлен королю §e"
+                + king2Name + " §a(§e" + targetNation + "§a). Жди ответа 10 минут.");
     }
+
+    /* ================= Акцепт ================= */
 
     public AcceptResult acceptOffer(Player king, String offerId) {
         Offer o = store.offerById(offerId);
@@ -130,44 +125,47 @@ public final class CaravanService {
         if (!towny.isKing(king))
             return new AcceptResult(false, "§cТолько король может принять оффер.");
 
-        double need = o.deposit2;
         double have = towny.nationBalance(myNation);
-        if (have < need) {
-            return new AcceptResult(false, "§cВ казне §e" + myNation + " §cнедостаточно: "
-                    + "нужно §b" + plugin.getVaultHook().format(need) + "§c, есть §b"
+        if (have < o.deposit2) {
+            return new AcceptResult(false, "§cВ казне §e" + myNation + " §cнедостаточно: нужно §b"
+                    + plugin.getVaultHook().format(o.deposit2) + "§c, есть §b"
                     + plugin.getVaultHook().format(have) + "§c.");
         }
 
-        // Списание с обеих казн
-        if (!towny.withdrawNationBank(o.fromNation, o.deposit1, "Caravan deposit")) {
+        if (!towny.withdrawNationBank(o.fromNation, o.deposit1, "TradeCaravan deposit")) {
             return new AcceptResult(false, "§cНе удалось списать с казны §e" + o.fromNation + "§c.");
         }
-        if (!towny.withdrawNationBank(o.toNation, o.deposit2, "Caravan deposit")) {
-            // откат первой
-            towny.depositNationBank(o.fromNation, o.deposit1, "Caravan rollback");
+        if (!towny.withdrawNationBank(o.toNation, o.deposit2, "TradeCaravan deposit")) {
+            towny.depositNationBank(o.fromNation, o.deposit1, "TradeCaravan rollback");
             return new AcceptResult(false, "§cНе удалось списать с казны §e" + o.toNation + "§c.");
         }
 
-        // Создание каравана
         Location start = towny.capitalLocation(o.fromNation);
-        Location end = towny.capitalLocation(o.toNation);
         World w = start.getWorld();
 
-        double baseHp = plugin.getConfig().getDouble("caravan.base-hp", 20.0);
-        double perGuard = plugin.getConfig().getDouble("caravan.hp-per-guard", 20.0);
+        double baseHp = plugin.getConfig().getDouble("caravan.base-hp", 500.0);
+        double perGuard = plugin.getConfig().getDouble("caravan.hp-per-guard", 200.0);
         double maxHp = baseHp + perGuard * o.guards;
 
-        ArmorStand stand = (ArmorStand) w.spawnEntity(start.clone().add(0, 0.5, 0), EntityType.ARMOR_STAND);
+        ArmorStand stand = (ArmorStand) w.spawnEntity(start.clone().add(0.5, 0.5, 0.5),
+                EntityType.ARMOR_STAND);
         stand.setCustomName("§6⚑ Караван §e" + o.fromNation + " §7→ §e" + o.toNation
                 + " §c♥" + ((int) maxHp));
         stand.setCustomNameVisible(true);
         stand.setBasePlate(false);
+        stand.setArms(false);
         stand.setGravity(false);
-        stand.setMarker(false);
         stand.setInvulnerable(false);
-        stand.setCanPickupItems(false);
-        org.bukkit.attribute.AttributeInstance hp = stand.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH);
-        if (hp != null) hp.setBaseValue(maxHp);
+
+        // Совместимость имён атрибута MAX_HEALTH между версиями API
+        Attribute maxHealthAttr;
+        try {
+            maxHealthAttr = Attribute.valueOf("MAX_HEALTH");
+        } catch (IllegalArgumentException ex) {
+            maxHealthAttr = Attribute.valueOf("GENERIC_MAX_HEALTH");
+        }
+        AttributeInstance inst = stand.getAttribute(maxHealthAttr);
+        if (inst != null) inst.setBaseValue(maxHp);
         stand.setHealth(maxHp);
 
         Caravan c = new Caravan();
@@ -189,22 +187,22 @@ public final class CaravanService {
         c.startedAtEpoch = now;
         c.arriveAtEpoch = now + travel;
         c.startX = start.getX(); c.startY = start.getY(); c.startZ = start.getZ();
+        Location end = towny.capitalLocation(o.toNation);
         c.endX = end.getX(); c.endY = end.getY(); c.endZ = end.getZ();
         c.world = w.getName();
         store.addCaravan(c);
         store.setLastCaravan(c.nation1, c.nation2, now);
         store.removeOffer(o);
 
-        // Сообщения обоим королям
         notifyKing(o.fromKing, "§a✦ Караван §e" + c.id + " §aотправлен в §e" + o.toNation
                 + " §a(прибытие через " + (travel / 3600) + " ч " + ((travel % 3600) / 60) + " мин).");
         notifyKing(o.toKing, "§a✦ Караван §e" + c.id + " §aиз §e" + o.fromNation
-                + " §aв пути. Ожидайте прибытия через " + (travel / 3600) + " ч " + ((travel % 3600) / 60) + " мин.");
+                + " §aв пути. Прибытие через " + (travel / 3600) + " ч " + ((travel % 3600) / 60) + " мин.");
 
-        plugin.getLogger().info("[Caravan] started " + c.id + ": " + o.fromNation
+        plugin.getLogger().info("[TradeCaravan] started " + c.id + ": " + o.fromNation
                 + " (" + o.deposit1 + ") -> " + o.toNation + " (" + o.deposit2
-                + "), guards=" + o.guards + ", profit%=" + (o.percent1 + o.percent2));
-        return new AcceptResult(true, "§aКараван §e" + c.id + " §aотправлен.");
+                + "), guards=" + o.guards + ", hp=" + maxHp);
+        return new AcceptResult(true, "§aКараван §e" + c.id + " §aотправлен (HP " + ((int) maxHp) + ").");
     }
 
     public void rejectOffer(Player king, String offerId) {
@@ -217,10 +215,10 @@ public final class CaravanService {
         }
         store.removeOffer(o);
         king.sendMessage("§cОффер §e" + offerId + " §cотклонён.");
-        notifyKing(o.fromKing, "§cКороль §e" + o.toKing + " §cотклонил ваш караван §e" + offerId + "§c.");
+        notifyKing(o.fromKing, "§cКороль §e" + o.toKing + " §cотклонил караван §e" + offerId + "§c.");
     }
 
-    /* ================= Завершение (прибытие) ================= */
+    /* ================= Прибытие ================= */
 
     public void arrive(Caravan c) {
         double total = c.deposit1 + c.deposit2;
@@ -230,12 +228,9 @@ public final class CaravanService {
         double toNation1 = c.deposit1 + profit * c.percent1 / profitPct;
         double toNation2 = c.deposit2 + profit * c.percent2 / profitPct;
 
-        towny.depositNationBank(c.nation1, toNation1,
-                "Caravan " + c.id + " arrived: principal + profit");
-        towny.depositNationBank(c.nation2, toNation2,
-                "Caravan " + c.id + " arrived: principal + profit");
+        towny.depositNationBank(c.nation1, toNation1, "TradeCaravan " + c.id + " arrived");
+        towny.depositNationBank(c.nation2, toNation2, "TradeCaravan " + c.id + " arrived");
 
-        // Удаляем NPC
         killEntity(c.entityId);
 
         notifyKing(c.king1, "§a✦ Караван §e" + c.id + " §aприбыл! В казну §e" + c.nation1
@@ -246,53 +241,51 @@ public final class CaravanService {
                 + " §a(вложение + прибыль " + c.percent2 + "%).");
 
         store.removeCaravan(c);
-        plugin.getLogger().info("[Caravan] arrived " + c.id + ": "
+        plugin.getLogger().info("[TradeCaravan] arrived " + c.id + ": "
                 + c.nation1 + " +" + toNation1 + ", " + c.nation2 + " +" + toNation2);
     }
 
     /* ================= Ограбление ================= */
 
     public void rob(Caravan c, java.util.Collection<Player> robbers) {
+        killEntity(c.entityId);
+        double total = c.deposit1 + c.deposit2;
+
         if (robbers.isEmpty()) {
+            // NPC пропал без убийц — возвращаем всё в казны
+            towny.depositNationBank(c.nation1, c.deposit1, "TradeCaravan " + c.id + " returned");
+            towny.depositNationBank(c.nation2, c.deposit2, "TradeCaravan " + c.id + " returned");
             store.removeCaravan(c);
             return;
         }
-        double total = c.deposit1 + c.deposit2;
+
         double minP = plugin.getConfig().getDouble("robbery.min-percent", 5.0);
         double maxP = plugin.getConfig().getDouble("robbery.max-percent", 35.0);
         double pct = minP + Math.random() * (maxP - minP);
         double stolen = total * pct / 100.0;
         double hidden = total - stolen;
 
-        // Раздача грабителям
         double per = stolen / robbers.size();
         for (Player p : robbers) {
-            plugin.getVaultHook().isAvailable(); // просто проверка
-            org.bukkit.Bukkit.dispatchCommand(
-                    org.bukkit.Bukkit.getConsoleSender(),
-                    "eco give " + p.getName() + " " + per);
+            plugin.getVaultHook().depositPlayer(p, per);
+            p.sendMessage("§6✦ Ограбление удалось! Добыча: §b"
+                    + plugin.getVaultHook().format(per) + " §7(" + ((int) pct) + "% каравана)");
         }
-        // Возврат "спрятанного" в казны по пропорции вложений
+
         double r1 = c.deposit1 / total;
         double r2 = c.deposit2 / total;
-        if (hidden > 0) {
-            towny.depositNationBank(c.nation1, hidden * r1,
-                    "Caravan " + c.id + " robbed: hidden returned");
-            towny.depositNationBank(c.nation2, hidden * r2,
-                    "Caravan " + c.id + " robbed: hidden returned");
-        }
+        towny.depositNationBank(c.nation1, hidden * r1, "TradeCaravan " + c.id + " hidden returned");
+        towny.depositNationBank(c.nation2, hidden * r2, "TradeCaravan " + c.id + " hidden returned");
 
-        killEntity(c.entityId);
-
-        notifyKing(c.king1, "§c✦ Караван §e" + c.id + " §cограблен! Потеряно §b"
-                + plugin.getVaultHook().format(stolen) + " §c(возвращено §b"
-                + plugin.getVaultHook().format(hidden * r1) + "§c).");
-        notifyKing(c.king2, "§c✦ Караван §e" + c.id + " §cограблен! Потеряно §b"
-                + plugin.getVaultHook().format(stolen) + " §c(возвращено §b"
-                + plugin.getVaultHook().format(hidden * r2) + "§c).");
+        notifyKing(c.king1, "§c✦ Караван §e" + c.id + " §cограблен! Утрачено §b"
+                + plugin.getVaultHook().format(stolen) + "§c, спрятано и возвращено §b"
+                + plugin.getVaultHook().format(hidden * r1) + "§c.");
+        notifyKing(c.king2, "§c✦ Караван §e" + c.id + " §cограблен! Утрачено §b"
+                + plugin.getVaultHook().format(stolen) + "§c, спрятано и возвращено §b"
+                + plugin.getVaultHook().format(hidden * r2) + "§c.");
 
         store.removeCaravan(c);
-        plugin.getLogger().info("[Caravan] robbed " + c.id + ": stolen=" + stolen
+        plugin.getLogger().info("[TradeCaravan] robbed " + c.id + ": stolen=" + stolen
                 + " hidden=" + hidden + " robbers=" + robbers.size());
     }
 
