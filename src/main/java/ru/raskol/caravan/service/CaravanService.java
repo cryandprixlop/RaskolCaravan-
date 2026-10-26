@@ -6,6 +6,7 @@ import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import ru.raskol.caravan.RaskolCaravan;
@@ -157,7 +158,6 @@ public final class CaravanService {
         stand.setGravity(false);
         stand.setInvulnerable(false);
 
-        // Совместимость имён атрибута MAX_HEALTH между версиями API
         Attribute maxHealthAttr;
         try {
             maxHealthAttr = Attribute.valueOf("MAX_HEALTH");
@@ -252,7 +252,6 @@ public final class CaravanService {
         double total = c.deposit1 + c.deposit2;
 
         if (robbers.isEmpty()) {
-            // NPC пропал без убийц — возвращаем всё в казны
             towny.depositNationBank(c.nation1, c.deposit1, "TradeCaravan " + c.id + " returned");
             towny.depositNationBank(c.nation2, c.deposit2, "TradeCaravan " + c.id + " returned");
             store.removeCaravan(c);
@@ -267,9 +266,10 @@ public final class CaravanService {
 
         double per = stolen / robbers.size();
         for (Player p : robbers) {
-            plugin.getVaultHook().depositPlayer(p, per);
-            p.sendMessage("§6✦ Ограбление удалось! Добыча: §b"
-                    + plugin.getVaultHook().format(per) + " §7(" + ((int) pct) + "% каравана)");
+            if (plugin.getVaultHook().depositPlayer(p, per)) {
+                p.sendMessage("§6✦ Ограбление удалось! Добыча: §b"
+                        + plugin.getVaultHook().format(per) + " §7(" + ((int) pct) + "% каравана)");
+            }
         }
 
         double r1 = c.deposit1 / total;
